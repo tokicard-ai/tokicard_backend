@@ -6,7 +6,8 @@ const router = express.Router();
 
 // ✅ WhatsApp webhook verification (required by Meta)
 router.get("/", (req, res) => {
-  const VERIFY_TOKEN = "tokibot123"; // Must match Meta dashboard
+ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+ // Must match Meta dashboard
 
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
