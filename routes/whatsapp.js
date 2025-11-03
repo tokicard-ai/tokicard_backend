@@ -35,7 +35,7 @@ router.post("/", async (req, res) => {
 
     const from = message.from;
 
-    // 🧠 Unified input handler (text or button click)
+    // 🧠 Unified text input handler (text or button)
     const text =
       message.text?.body?.trim().toLowerCase() ||
       message.interactive?.button_reply?.title?.toLowerCase() ||
@@ -43,11 +43,11 @@ router.post("/", async (req, res) => {
 
     console.log("📩 Message received from", from, ":", text);
 
-    // 🧠 NLP tokenization
+    // 🧠 NLP setup
     const tokenizer = new natural.WordTokenizer();
     const tokens = tokenizer.tokenize(text.toLowerCase());
 
-    // 🎯 Intent dictionary (extended)
+    // 🎯 Intent dictionary
     const intents = {
       register: ["register", "signup", "sign up", "create", "join", "get started", "start"],
       kyc: ["kyc", "verify", "verification", "identity", "id", "verify id", "confirm identity"],
@@ -65,19 +65,36 @@ router.post("/", async (req, res) => {
       fiat: ["bank", "transfer", "usd", "fiat", "payment link"]
     };
 
+    // 🧩 Smart Intent Detection (Substring + Fuzzy Matching)
     let userIntent = null;
 
+    // Step 1: Try substring or token match
     for (const [intent, keywords] of Object.entries(intents)) {
-      if (tokens.some(word => keywords.includes(word))) {
-        userIntent = intent;
-        break;
+      for (const keyword of keywords) {
+        if (text.includes(keyword) || tokens.some((word) => keyword.includes(word))) {
+          userIntent = intent;
+          break;
+        }
       }
+      if (userIntent) break;
+    }
+
+    // Step 2: Try fuzzy (similarity-based) detection if no match found
+    if (!userIntent) {
+      let bestMatch = { intent: null, score: 0 };
+      for (const [intent, keywords] of Object.entries(intents)) {
+        for (const keyword of keywords) {
+          const score = natural.JaroWinklerDistance(text, keyword);
+          if (score > bestMatch.score) bestMatch = { intent, score };
+        }
+      }
+      if (bestMatch.score > 0.85) userIntent = bestMatch.intent;
     }
 
     console.log("🎯 Detected intent:", userIntent);
 
     /* 👋 Greeting */
-    if (["hi", "hello", "hey"].includes(text)) {
+    if (["hi", "hello", "hey", "hi toki", "hey toki", "hello toki"].some((greet) => text.includes(greet))) {
       await sendMessage(
         from,
         "👋 Welcome to *Toki Card*! What would you like to do?",
@@ -90,7 +107,7 @@ router.post("/", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    /* 🧠 Handle detected intents */
+    /* 🧠 Intent-based responses */
     if (userIntent === "register") {
       await sendMessage(
         from,
@@ -226,9 +243,7 @@ router.post("/", async (req, res) => {
       if (isEarlyUser) {
         await sendMessage(
           from,
-          `🎉 Welcome back, ${
-            waitlistEntries[userIndex].fullName || "Toki user"
-          }!\nYou're among the *first 500 waitlist members* — your Toki Card activation will be *FREE*! 🔥`,
+          `🎉 Welcome back, ${waitlistEntries[userIndex].fullName || "Toki user"}!\nYou're among the *first 500 waitlist members* — your Toki Card activation will be *FREE*! 🔥`,
           [{ label: "KYC" }]
         );
       } else {
@@ -240,7 +255,7 @@ router.post("/", async (req, res) => {
       }
     }
 
-    /* 🤖 Default Fallback */
+    /* 🤖 Default fallback */
     else {
       await sendMessage(
         from,
