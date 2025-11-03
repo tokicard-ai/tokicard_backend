@@ -55,7 +55,7 @@ router.post("/", async (req, res) => {
       fund: ["fund", "top up", "deposit", "add money", "recharge", "add funds", "fund wallet"],
       balance: ["balance", "check balance", "how much", "remaining", "wallet balance"],
       help: ["help", "support", "assist", "problem", "contact", "customer care"],
-      about: ["what is toki", "toki card", "about", "who are you", "toki info", "tell me about toki"],
+      about: ["what is toki","what is toki card", "toki card", "about", "who are you", "toki info", "tell me about toki"],
       how: ["how", "how it works", "how does it work", "explain", "working", "how to use", "usage"],
       security: ["safe", "secure", "trust", "is it safe", "security", "fraud", "scam", "legit"],
       fees: ["cost", "fee", "price", "charges", "how much", "payment", "subscription", "plan"],
