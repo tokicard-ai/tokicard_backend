@@ -55,7 +55,7 @@ router.post("/", async (req, res) => {
       fund: ["fund", "top up", "deposit", "add money", "recharge", "add funds", "fund wallet"],
       balance: ["balance", "check balance", "how much", "remaining", "wallet balance"],
       help: ["help", "support", "assist", "problem", "contact", "customer care"],
-      about: ["what is toki","what istoki card", "toki card", "about", "who are you", "toki info", "tell me about toki"],
+      about: ["what is toki", "what is toki card", "toki card", "about", "who are you", "toki info", "tell me about toki"],
       how: ["how", "how it works", "how does it work", "explain", "working", "how to use", "usage"],
       security: ["safe", "secure", "trust", "is it safe", "security", "fraud", "scam", "legit"],
       fees: ["cost", "fee", "price", "charges", "how much", "payment", "subscription", "plan"],
@@ -68,7 +68,6 @@ router.post("/", async (req, res) => {
     // 🧩 Smart Intent Detection (Substring + Fuzzy Matching)
     let userIntent = null;
 
-    // Step 1: Try substring or token match
     for (const [intent, keywords] of Object.entries(intents)) {
       for (const keyword of keywords) {
         if (text.includes(keyword) || tokens.some((word) => keyword.includes(word))) {
@@ -79,7 +78,7 @@ router.post("/", async (req, res) => {
       if (userIntent) break;
     }
 
-    // Step 2: Try fuzzy (similarity-based) detection if no match found
+    // Fuzzy fallback
     if (!userIntent) {
       let bestMatch = { intent: null, score: 0 };
       for (const [intent, keywords] of Object.entries(intents)) {
@@ -99,8 +98,8 @@ router.post("/", async (req, res) => {
         from,
         "👋 Welcome to *Toki Card*! What would you like to do?",
         [
-          { label: "fund" },
-          { label: "balance" },
+          { label: "Fund" },
+          { label: "Balance" },
           { label: "About" }
         ]
       );
@@ -183,7 +182,7 @@ router.post("/", async (req, res) => {
     else if (userIntent === "fees") {
       await sendMessage(
         from,
-        "💸 *Toki Card Fees*\n\n• Early users (first 500): *FREE activation*\n• Standard activation: *$2 one-time fee*\n• Funding fees: *0% for crypto*, *1% for fiat transfers*\n• Monthly maintenance: *$0 — no recurring charges*\n\nTransparent, simple, and affordable. 💚"
+        "💸 *Toki Card Fees*\n\n• Early users: *FREE activation*\n• Funding fees: *0% for crypto*, *1% for fiat transfers*\n• Monthly maintenance: *$0 — no recurring charges*\n\nTransparent, simple, and affordable. 💚"
       );
     }
 
@@ -218,17 +217,15 @@ router.post("/", async (req, res) => {
     /* 📧 Handle Email Input */
     else if (text.includes("@")) {
       const email = text.trim().toLowerCase();
-      const waitlistSnapshot = await db
-        .collection("waitlist")
-        .orderBy("timestamp", "asc")
-        .get();
+      const waitlistSnapshot = await db.collection("waitlist").orderBy("timestamp", "asc").get();
 
       const waitlistEntries = waitlistSnapshot.docs.map((doc) => doc.data());
       const userIndex = waitlistEntries.findIndex(
         (entry) => entry.email.toLowerCase() === email
       );
 
-      const isEarlyUser = userIndex !== -1 && userIndex < 500;
+      // ✅ New condition: anyone on the waitlist gets free activation
+      const isWaitlisted = userIndex !== -1;
 
       await db.collection("users").doc(from).set({
         phone: from,
@@ -236,20 +233,20 @@ router.post("/", async (req, res) => {
         kycStatus: "pending",
         cardActive: false,
         annualFeePaid: false,
-        isEarlyUser,
+        isWaitlisted,
         createdAt: new Date(),
       });
 
-      if (isEarlyUser) {
+      if (isWaitlisted) {
         await sendMessage(
           from,
-          `🎉 Welcome back, ${waitlistEntries[userIndex].fullName || "Toki user"}!\nYou're among the *first 500 waitlist members* — your Toki Card activation will be *FREE*! 🔥`,
+          `🎉 Welcome back, ${waitlistEntries[userIndex].fullName || "Toki user"}!\nYou're already on our waitlist — your Toki Card activation will be *FREE*! 🔥`,
           [{ label: "KYC" }]
         );
       } else {
         await sendMessage(
           from,
-          "✅ Account created successfully!",
+          "✅ Account created successfully! You’re now eligible for your Toki Card.",
           [{ label: "KYC" }]
         );
       }
