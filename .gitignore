@@ -1,3 +1,18 @@
 node_modules
 .env
 serviceAccountKey.json
+
+
+# {
+#   "type": "service_account",
+#   "project_id": "toki-card",
+#   "private_key_id": "daa85a7cb9f2a445478e48ebbaa7da4923ac7963",
+#   "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC5/0kYh5bCKagC\nrey4Op9SKL23sZhhYzgi20O2j0n94t4DP23eFxzoxmSipUXwZgw2rMvU77zMkBfV\nAU4FxmWgfIFvmdkngiZtieQ82CV+B8g3d9+/VBYLd20n6f2hSsDIEpUgB197nIJB\nbI2oDfPTS3d2aLDVwd4hsAgo1fuD25q80VONis7suZvL1OTsZPuhwLsYOKo62QeE\njkFSn+/0Uwe0GxvXuSrQ5SZ49FHDhV+aMPJ+DAAaxiu+ldR1GF0G1jh+ikUhv91F\nWQO/b6wQ6x9rH+UPDMRJ6+Tn6JstyFw9xcWKMgtdxlFJzI0HDd1Dve299fmYMsJb\nCXoNM6lBAgMBAAECggEADD2o+L5urXFao2+BH2hLRTfVcY4UeF9UadXanVyNivIX\n+Kh/YXENt+ObqqkcItvCdMQ3R3iuKRvYF66F7SMfG9pp1dePFzatcwLS1K7Ie+SE\n+KKQ5QmCiGdoFYsEpE10Rc6URib6EZttpqLfaUaezAKA1pgCAFVpmje4t8BKdOVd\nrvSdCCe022DP8QbFNYr2mnBHZA0RmzTVDsYiRqmTvv4UqCTHEE/qBY6KUFCxbaxt\nx4vqueTMEb8LlYRtedMiZKIABkao2F8af17jT/z8lndE0WgWH5KY1RDCE6xNI7ZX\nSe6w31XTcsis3twgE/08qSGX7WzYRMLw1IbJH6u2+QKBgQDcBc90/jmLtk5vUUYB\npprYsuQuhjCmvZFTwIWhcMoyjnYNVgohPr+GCozejqFLvdq3XsY4csfxLRXblosV\nidyhCHTr41yUGHPUXOMy9e6VlrEsF22OCw6tXUloF85CVaAzfpPLkvPt361JjFsq\nHrK2kbLx7q+xMxsF5zx8TX266QKBgQDYaSmA6dUhhjl5yB0MV3WX34SmId65Sc8p\nUSDcMpgoisTsZ/AR3cZdTqWgYhmGZbWcVy7LADAFbeaaJuYSsGhCS5c8KeQX2ZZL\nSCj4qG0tcz0SbOAuc+X3yJ+4GptCdbR+WS6mPQfkwjxlWJ20e4bz5YJ/DAtEKsPo\njdmjtFbUmQKBgQDGXX6yjdm3+n8woWeqaVjF8lMDFvyZ9+MkTTitWpERj5sjXuT3\nIClwYearaJBHRz3/gLTZg7J74BgKx+lRW9/MV2GCopN++aTEW5KDCXM27ouBowWk\nwJdU+fwKmxvcdnJeusnpCe5eEgGbg61VhiO9shJRSM6hxd+hLN89emfWsQKBgQCH\n1EmWfi2loweEJlQFIQfP0R0C4RNYHLmH50HGs4LJP4AmGX6W2Cne+rP+HFSFBGWe\nwSG/jFiXr8kjS/LwHAT0R1mfC3P8fDdW/O2qVJxiAIh+fhOfVGMsyKFm/lwgtJwb\nCYK8GGZR8I/T1HD3jOjBQHZNo5OWr3jTB+VoWJJ/UQKBgFJ4DiUn0j756QBgxbV+\n+rbkiRaogX6QF8S6jNSZSa64UefI9pxuicQEIANNmuW3uj+I2ktmlh9/iVFmmE0N\nhPlzttLJX3PUgeV72Oqie62r6TQFLkb8YmzA1NDA3MEWnArnOUGRxtD90fLHuNww\nynp8KSPqlhFCkT5k7mjLKgJP\n-----END PRIVATE KEY-----\n",
+#   "client_email": "firebase-adminsdk-fbsvc@toki-card.iam.gserviceaccount.com",
+#   "client_id": "108567460820731646005",
+#   "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+#   "token_uri": "https://oauth2.googleapis.com/token",
+#   "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+#   "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40toki-card.iam.gserviceaccount.com",
+#   "universe_domain": "googleapis.com"
+# }
