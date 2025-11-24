@@ -152,18 +152,37 @@ router.post("/", async (req, res) => {
     /* --------------------------- ACTIVATE CARD (REGISTER) --------------------------- */
     if (userIntent === "register") {
       const link = `${WEBAPP}/?phone=${from}`;
-      await sendMessage(from, `🚀 *Activate your Toki Card:*\n\n${link}\n\nComplete the form to activate your card.`, [
+      // Send with URL button (opens in WhatsApp)
+      await sendMessage(
+        from, 
+        `🚀 *Activate your Toki Card*\n\nTap the button below to complete your registration and get started!`, 
+        [], 
+        true, 
+        1200,
+        { text: "Activate Card Now", url: link } // URL button
+      );
+      // Optional: Send follow-up buttons
+      await sendMessage(from, "Need help?", [
         { label: "KYC" }, { label: "Help" }
-      ]);
+      ], false);
       return res.sendStatus(200);
     }
 
     /* --------------------------- KYC --------------------------- */
     if (userIntent === "kyc") {
       const kyc = `${WEBAPP}/?phone=${from}`;
-      await sendMessage(from, `📋 *Complete your KYC verification:*\n\n${kyc}\n\nThis is required before you can fund your card.`, [
+      // Send with URL button
+      await sendMessage(
+        from, 
+        `📋 *Complete your KYC verification*\n\nThis is required before you can fund your card.`, 
+        [], 
+        true, 
+        1200,
+        { text: "Start KYC Verification", url: kyc }
+      );
+      await sendMessage(from, "After KYC:", [
         { label: "Fund" }, { label: "Help" }
-      ]);
+      ], false);
       return res.sendStatus(200);
     }
 

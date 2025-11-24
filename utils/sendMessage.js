@@ -1,4 +1,4 @@
-// utils/sendMessage.js → FINAL PRODUCTION VERSION
+// utils/sendMessage.js → FINAL PRODUCTION VERSION WITH URL BUTTONS
 import axios from "axios";
 import dotenv from "dotenv";
 dotenv.config();
@@ -30,14 +30,21 @@ async function sendTypingIndicator(to, duration = 1500) {
 }
 
 /**
- * Send WhatsApp message with optional buttons & typing indicator
+ * Send WhatsApp message with optional buttons, URL button & typing indicator
+ * @param {string} to - Recipient phone number
+ * @param {string} text - Message text
+ * @param {Array} buttons - Quick reply buttons (max 3): [{ label: "Help" }]
+ * @param {boolean} withTyping - Show typing indicator
+ * @param {number} typingDuration - Typing duration in ms
+ * @param {Object} urlButton - URL button: { text: "Open Link", url: "https://..." }
  */
 export async function sendMessage(
   to,
   text,
   buttons = [],
-  withTyping = true,        // ← I changed default to true — feels more human
-  typingDuration = 1200
+  withTyping = true,
+  typingDuration = 1200,
+  urlButton = null  // NEW: URL button parameter
 ) {
   try {
     if (withTyping) {
@@ -46,8 +53,28 @@ export async function sendMessage(
 
     let payload;
 
-    if (buttons.length > 0) {
-      // Interactive buttons
+    // PRIORITY 1: URL Button (Call-to-Action) - Opens in WhatsApp
+    if (urlButton && urlButton.url) {
+      payload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "interactive",
+        interactive: {
+          type: "cta_url",
+          body: { text },
+          action: {
+            name: "cta_url",
+            parameters: {
+              display_text: urlButton.text || "Open Link",
+              url: urlButton.url
+            }
+          }
+        }
+      };
+    }
+    // PRIORITY 2: Quick Reply Buttons
+    else if (buttons.length > 0) {
       payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
@@ -67,8 +94,9 @@ export async function sendMessage(
           },
         },
       };
-    } else {
-      // Plain text
+    }
+    // PRIORITY 3: Plain text
+    else {
       payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
@@ -89,16 +117,33 @@ export async function sendMessage(
       }
     );
 
-    console.log(`Message sent to ${to}`);
+    console.log(`✅ Message sent to ${to}`);
     return response.data;
   } catch (error) {
     console.error(
-      "Failed to send WhatsApp message:",
+      "❌ Failed to send WhatsApp message:",
       error.response?.data || error.message
     );
     throw error;
   }
 }
 
-// Optional: Add sendList if you want dropdown menus later
-// export async function sendList(...) { ... }
+/**
+ * Send message with URL button AND follow-up quick reply buttons
+ * (WhatsApp doesn't support mixing them in one message)
+ */
+export async function sendMessageWithUrlAndButtons(to, text, urlButton, followUpButtons = []) {
+  try {
+    // Send URL button message first
+    await sendMessage(to, text, [], true, 1200, urlButton);
+    
+    // Send follow-up with quick reply buttons (optional)
+    if (followUpButtons.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay
+      await sendMessage(to, "Quick actions:", followUpButtons, false);
+    }
+  } catch (error) {
+    console.error("Failed to send combined message:", error);
+    throw error;
+  }
+}
