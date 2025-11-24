@@ -1,253 +1,193 @@
+// routes/whatsapp.js → FINAL VERSION WITH EVERYTHING YOU WANT
 import express from "express";
+import axios from "axios";
 import natural from "natural";
-import { sendMessage } from "../utils/sendMessage.js";
-import { db } from "../firebase.js";
+import { sendMessage, sendButtons } from "../utils/sendMessage.js";
 
 const router = express.Router();
+const tokenizer = new natural.WordTokenizer();
 
-/* --------------------------- CARD GENERATOR --------------------------- */
-function generateCard() {
-  const random4 = () => Math.floor(1000 + Math.random() * 9000).toString();
-  // Zero-width joiner to prevent WhatsApp from splitting the number
-  const zw = "\u200B";
-  const number =
-    random4() + zw +
-    random4() + zw +
-    random4() + zw +
-    random4(); // 16 digits, no breaks
+const API_BASE = process.env.API_BASE || "https://tokicard-backendatabase.onrender.com/auth";
+const WEBAPP = "https://tokicard-onboardingform.onrender.com";
 
-  const expiryMonth = ("0" + Math.floor(1 + Math.random() * 12)).slice(-2);
-  const expiryYear = 26 + Math.floor(Math.random() * 6); // 2026–2031
-  const cvv = Math.floor(100 + Math.random() * 900).toString();
-  const addresses = [
-    "55 Madison Ave, New York, NY",
-    "1208 Sunset Blvd, Los Angeles, CA",
-    "322 Park Ave, Miami, FL",
-    "44 Wall Street, New York, NY",
-    "270 Pine St, San Francisco, CA"
-  ];
+const userCache = new Map();
 
-  return {
-    number, // protected with ZWJ
-    expiry: `${expiryMonth}/${expiryYear}`,
-    cvv,
-    billingAddress: addresses[Math.floor(Math.random() * addresses.length)]
-  };
+async function getUser(phone) {
+  if (userCache.has(phone)) return userCache.get(phone);
+  try {
+    const res = await axios.get(`${API_BASE}/user`, { params: { email: phone }, timeout: 8000 });
+    const user = res.data;
+    userCache.set(phone, user);
+    return user;
+  } catch (err) {
+    userCache.set(phone, null);
+    return null;
+  }
 }
 
-/* ---------------------- META WEBHOOK VERIFICATION --------------------- */
+function clearCache(phone) {
+  userCache.delete(phone);
+}
+
+// ====================== WEBHOOK ======================
 router.get("/", (req, res) => {
-  const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
-
-  if (mode && token) {
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("WhatsApp Webhook verified successfully!");
-      res.status(200).send(challenge);
-    } else {
-      res.sendStatus(403);
-    }
-  } else {
-    res.sendStatus(400);
+  if (mode === "subscribe" && token === process.env.VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
   }
+  res.sendStatus(403);
 });
 
-/* ----------------------------- MAIN ROUTER ----------------------------- */
+// ====================== MAIN HANDLER ======================
 router.post("/", async (req, res) => {
   try {
-    console.log("Incoming webhook:", JSON.stringify(req.body, null, 2));
-
     const message = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!message) return res.sendStatus(200);
 
     const from = message.from;
-    const text =
-      message.text?.body?.trim().toLowerCase() ||
-      message.interactive?.button_reply?.title?.toLowerCase() ||
-      "";
+    const text = (message.text?.body || "").trim().toLowerCase();
+    const buttonId = message.interactive?.button_reply?.id;
 
-    console.log("Message from", from, ":", text);
+    const user = await getUser(from);
 
-    /* ----------------------------- INTENTS ----------------------------- */
+    // ====================== BUTTON ACTIONS ======================
+    if (buttonId === "OPEN_WEB") {
+      const link = user?.fundingCompleted ? `${WEBAPP}/dashboard?phone=${from}`
+        : user?.kycBasicCompleted ? `${WEBAPP}/funding?phone=${from}`
+        : `${WEBAPP}/?phone=${from}`;
+      await sendMessage(from, `Opening your dashboard...\n${link}`);
+      return res.sendStatus(200);
+    }
+
+    // ====================== NATURAL LANGUAGE ======================
+    const words = tokenizer.tokenize(text) || [];
     const intents = {
-      register: ["register", "signup", "sign up", "create", "start", "open registration"],
-      kyc: ["kyc", "verify", "identity", "id"],
-      activate: ["activate", "activate card"],
-      fund: ["fund", "top up", "deposit"],
-      balance: ["balance", "wallet"],
-      help: ["help", "support"],
-      about: ["what is toki", "toki card", "about"],
-      how: ["how", "how it works"],
-      security: ["safe", "secure", "trust"],
-      fees: ["cost", "fee", "charges"],
-      features: ["features", "benefits"],
-      referral: ["refer", "invite"],
-      crypto: ["crypto", "usdt", "bitcoin"],
-      fiat: ["bank", "fiat"],
-      card: [
-        "show card",
-        "card details",
-        "show card details",
-        "my card",
-        "virtual card",
-        "card info",
-        "show my card"
-      ],
-      acknowledge: ["ok", "okay", "cool"],
-      followup: ["what next", "continue"]
+      greeting: ["hi", "hello", "hey", "start", "good morning", "gm", "helo"],
+      about: ["about", "what is toki", "what is this", "explain", "wetin be this"],
+      how: ["how", "how it works", "how do i", "how to get card", "abeg how"],
+      balance: ["balance", "wallet", "money"],
+      card: ["card", "my card", "show card", "view card"],
+      activate: ["activate card", "activate", "i paid", "paid", "done", "i have paid", "abeg activate"],
+      support: ["support", "help me", "problem", "issue", "contact"],
+      menu: ["menu", "options", "what can i do"]
     };
 
-    let userIntent = null;
-    for (const [intent, list] of Object.entries(intents)) {
-      if (list.some((kw) => text.includes(kw))) {
-        userIntent = intent;
-        break;
-      }
+    let intent = null;
+    for (const [key, keywords] of Object.entries(intents)) {
+      if (keywords.some(k => words.includes(k))) { intent = key; break; }
     }
 
-    console.log("Detected intent:", userIntent);
+    // ====================== ABOUT TOKI CARD ======================
+    if (intent === "about") {
+      await sendMessage(from,
+        `*Toki Card – Your USD Virtual Card from Nigeria*\n\n` +
+        `• Spend online worldwide\n` +
+        `• Pay Netflix, Amazon, Apple, etc.\n` +
+        `• No bank account needed\n` +
+        `• $5 one-time activation\n` +
+        `• Get card in 2 minutes via WhatsApp\n\n` +
+        `Over 5,000 Nigerians already using it!`
+      );
+      await sendButtons(from, "Ready to get yours?", [
+        { id: "OPEN_WEB", title: "Get My Card Now" }
+      ]);
+      return res.sendStatus(200);
+    }
 
-    /* ------------------------------ GREETING ------------------------------ */
-    if (["hi", "hello", "hey"].some((g) => text.includes(g))) {
-      await sendMessage(
-        from,
-        "Welcome to *Toki Card*! What would you like to do?",
-        [{ label: "Fund" }, { label: "About" }, { label: "Help" }]
+    // ====================== HOW IT WORKS ======================
+    if (intent === "how") {
+      await sendMessage(from,
+        `*How Toki Card Works (2 Minutes)*\n\n` +
+        `1️⃣ Say *hi* → complete profile\n` +
+        `2️⃣ Pay $5 (₦7,500) one-time\n` +
+        `3️⃣ Type *activate card*\n` +
+        `4️⃣ Type *card* → get your USD card instantly\n\n` +
+        `That’s all. No stories.`
+      );
+      await sendButtons(from, "Start now?", [
+        { id: "OPEN_WEB", title: "Yes, Get My Card" }
+      ]);
+      return res.sendStatus(200);
+    }
+
+    // ====================== SUPPORT ======================
+    if (intent === "support") {
+      await sendMessage(from,
+        `Need help?\n\n` +
+        `We're here 24/7!\n` +
+        `Just type your issue and we'll reply fast.\n\n` +
+        `Or message @tokicard_support on WhatsApp`
       );
       return res.sendStatus(200);
     }
 
-    /* --------------------- CARD DETAILS — 2 MESSAGES --------------------- */
-    if (userIntent === "card") {
-      const ref = db.collection("users").doc(from);
-      const doc = await ref.get();
+    // ====================== MAIN MENU (RICH & FULL) ======================
+    if (intent === "menu" || intent === "greeting" || !text) {
+      const name = user?.firstName ? ` ${user.firstName.split(" ")[0]}!` : "!";
 
-      if (!doc.exists) {
-        await sendMessage(
-          from,
-          "Please *register first* before viewing your card.",
-          [{ label: "Register" }]
-        );
-        return res.sendStatus(200);
-      }
+      await sendMessage(from, `Hey${name} Welcome to *Toki Card*`);
 
-      let card = doc.data().card;
-      if (!card) {
-        card = generateCard();
-        await ref.update({ card });
-      }
+      const buttons = [
+        { id: "OPEN_WEB", title: user?.fundingCompleted ? "Open Dashboard" : user?.kycBasicCompleted ? "Activate Card ($5)" : "Get Started" },
+        { title: "About Toki Card", id: "about" },
+        { title: "How It Works", id: "how" },
+        { title: "Support", id: "support" }
+      ];
 
-      // FIRST MESSAGE: Expiry, CVV, Address
-      await sendMessage(
-        from,
-        `*Your Toki USD Virtual Card*\n\n` +
-          `• *Expiry:* ${card.expiry}\n` +
-          `• *CVV:* ${card.cvv}\n` +
-          `• *Billing Address:* ${card.billingAddress}\n\n` +
-          `Your card number is below`,
-        [{ label: "Fund" }, { label: "Help" }]
-      );
+      if (user?.kycBasicCompleted) buttons.splice(1, 0, { title: "Check Balance", id: "balance" });
+      if (user?.fundingCompleted) buttons.splice(1, 0, { title: "View My Card", id: "card" });
 
-      // SECOND MESSAGE: Card number in monospace, no auto-spacing
-      await sendMessage(
-        from,
-        `*Card Number:*\n\`${card.number}\`\n\n_Tap & hold to copy_`,
-        []
-      );
-
+      await sendButtons(from, "Choose an option:", buttons);
       return res.sendStatus(200);
     }
 
-    /* --------------------------- OTHER INTENTS --------------------------- */
-    if (userIntent === "register") {
-      const link = `https://tokicard-onboardingform.onrender.com?phone=${from}`;
-      await sendMessage(
-        from,
-        `Start your registration:\n${link}`,
-        [{ label: "Open Registration" }, { label: "KYC" }]
+    // ====================== ACTIVATE CARD ======================
+    if (intent === "activate") {
+      if (!user) { await sendMessage(from, "Say *hi* first"); return res.sendStatus(200); }
+      if (!user.kycBasicCompleted) { await sendMessage(from, "Complete your profile first! Say *hi*"); return res.sendStatus(200); }
+      if (user.fundingCompleted) { await sendMessage(from, "Already activated! Type *card*"); return res.sendStatus(200); }
+
+      await axios.post(`${API_BASE}/kyc-funding`, { email: user.email || from, amount: 5 });
+      clearCache(from);
+
+      await sendMessage(from, `*Congratulations!* Your Toki Card is now active!\nType *card* to see it`);
+      return res.sendStatus(200);
+    }
+
+    // ====================== CARD & BALANCE (same as before) ======================
+    if (intent === "card") {
+      if (!user?.fundingCompleted) { await sendMessage(from, "Activate first! Type *activate card*"); return res.sendStatus(200); }
+      if (!user.card?.number) { await sendMessage(from, "Card generating... wait 30 secs"); return res.sendStatus(200); }
+
+      const card = user.card;
+      await sendMessage(from,
+        `*Your Toki USD Card*\n\n` +
+        `Number: \`${card.number}\`\n` +
+        `Expiry: ${card.expiry} • CVV: ${card.cvv}\n\n` +
+        `_Tap & hold to copy_`
       );
       return res.sendStatus(200);
     }
 
-    if (userIntent === "kyc") {
-      const kyc = `https://tokicard-onboardingform.onrender.com?user=${from}`;
-      await sendMessage(from, `Complete your KYC:\n${kyc}`, [{ label: "Fund" }]);
+    if (intent === "balance") {
+      await sendMessage(from, `Balance: *$${user?.fundedAmount || 0}.00 USD*`);
       return res.sendStatus(200);
     }
 
-    if (userIntent === "fund") {
-      const ref = db.collection("users").doc(from);
-      const doc = await ref.get();
+    // ====================== DEFAULT ======================
+    await sendButtons(from, "Main Menu:", [
+      { id: "OPEN_WEB", title: "Continue →" },
+      { title: "About", id: "about" },
+      { title: "How It Works", id: "how" }
+    ]);
 
-      if (!doc.exists) {
-        await sendMessage(from, "Please *register* first.", [{ label: "Register" }]);
-        return res.sendStatus(200);
-      }
-
-      if (!doc.data().cardActive) {
-        await sendMessage(
-          from,
-          "You must complete *KYC* before funding.",
-          [{ label: "KYC" }]
-        );
-        return res.sendStatus(200);
-      }
-
-      await sendMessage(
-        from,
-        "Choose your funding method:",
-        [{ label: "Crypto" }, { label: "Fiat" }]
-      );
-      return res.sendStatus(200);
-    }
-
-    if (userIntent === "crypto") {
-      await sendMessage(from, "We support *USDT (TRC20)* and *BTC*.");
-      return res.sendStatus(200);
-    }
-
-    if (userIntent === "fiat") {
-      await sendMessage(from, "Bank transfer coming soon.");
-      return res.sendStatus(200);
-    }
-
-    /* -------------------------- EMAIL REGISTRATION ------------------------- */
-    if (text.includes("@")) {
-      const email = text.trim().toLowerCase();
-      const waitlistSnapshot = await db.collection("waitlist").orderBy("timestamp", "asc").get();
-      const waitlistEntries = waitlistSnapshot.docs.map((d) => d.data());
-      const exists = waitlistEntries.some((w) => w.email === email);
-
-      await db.collection("users").doc(from).set({
-        phone: from,
-        email,
-        kycStatus: "pending",
-        cardActive: false,
-        annualFeePaid: false,
-        isWaitlisted: exists,
-        createdAt: new Date()
-      }, { merge: true });
-
-      await sendMessage(
-        from,
-        exists ? "You're already on the waitlist." : "Account created!",
-        [{ label: "KYC" }]
-      );
-      return res.sendStatus(200);
-    }
-
-    /* ------------------------------ DEFAULT ------------------------------ */
-    await sendMessage(
-      from,
-      "I didn’t understand that. Type *help* to see commands.",
-      [{ label: "Help" }]
-    );
     return res.sendStatus(200);
 
   } catch (err) {
-    console.error("WhatsApp route error:", err);
+    console.error("Bot error:", err.message);
+    await sendMessage(from, "Small wahala. Try again");
     res.sendStatus(500);
   }
 });
