@@ -1,7 +1,7 @@
 // routes/whatsapp.js → FIXED VERSION (Button Priority Fix)
 import express from "express";
 import axios from "axios";
-import { sendMessage } from "../utils/sendMessage.js";
+import { sendMessage, sendRegistrationFlow } from "../utils/sendMessage.js";
 const router = express.Router();
 
 const API_BASE = "https://tokicard-api.onrender.com/auth";
@@ -151,20 +151,8 @@ router.post("/", async (req, res) => {
 
     /* --------------------------- ACTIVATE CARD (REGISTER) --------------------------- */
     if (userIntent === "register") {
-      const link = `${WEBAPP}/?phone=${from}`;
-      // Send with URL button (opens in WhatsApp)
-      await sendMessage(
-        from, 
-        `🚀 *Activate your Toki Card*\n\nTap the button below to complete your registration and get started!`, 
-        [], 
-        true, 
-        1200,
-        { text: "Activate Card Now", url: link } // URL button
-      );
-      // Optional: Send follow-up buttons
-      await sendMessage(from, "Need help?", [
-        { label: "KYC" }, { label: "Help" }
-      ], false);
+      // Send WhatsApp Flow - Opens INSIDE WhatsApp! 🎉
+      await sendRegistrationFlow(from);
       return res.sendStatus(200);
     }
 
