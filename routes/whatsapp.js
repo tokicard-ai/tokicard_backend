@@ -1,7 +1,7 @@
 // routes/whatsapp.js → FIXED VERSION (Button Priority Fix)
 import express from "express";
 import axios from "axios";
-import { sendMessage, sendRegistrationFlow } from "../utils/sendMessage.js";
+import { sendMessage } from "../utils/sendMessage.js";
 const router = express.Router();
 
 const API_BASE = "https://tokicard-api.onrender.com/auth";
@@ -149,30 +149,38 @@ router.post("/", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    /* --------------------------- ACTIVATE CARD (REGISTER) --------------------------- */
-    if (userIntent === "register") {
-      // Send WhatsApp Flow - Opens INSIDE WhatsApp! 🎉
-      await sendRegistrationFlow(from);
-      return res.sendStatus(200);
+ /* --------------------------- ACTIVATE CARD (REGISTER) --------------------------- */
+if (userIntent === "register") {
+  // THIS IS THE MAGIC — opens your website directly inside WhatsApp
+  await sendMessage(from, "Complete your registration to get your virtual USD card instantly!", [
+    {
+      type: "button",
+      button: {
+        type: "webview",                                    // ← Opens INSIDE WhatsApp
+        url: `${WEBAPP}/?phone=${from}`,                    // ← Your exact website
+        text: "Open Registration →"
+        // immersive: true   ← not needed anymore (2025 auto-does it)
+      }
     }
+  ]);
+  return res.sendStatus(200);
+}
 
-    /* --------------------------- KYC --------------------------- */
-    if (userIntent === "kyc") {
-      const kyc = `${WEBAPP}/?phone=${from}`;
-      // Send with URL button
-      await sendMessage(
-        from, 
-        `📋 *Complete your KYC verification*\n\nThis is required before you can fund your card.`, 
-        [], 
-        true, 
-        1200,
-        { text: "Start KYC Verification", url: kyc }
-      );
-      await sendMessage(from, "After KYC:", [
-        { label: "Fund" }, { label: "Help" }
-      ], false);
-      return res.sendStatus(200);
+/* --------------------------- KYC --------------------------- */
+if (userIntent === "kyc") {
+  // Same magic for KYC — opens your website directly inside WhatsApp
+  await sendMessage(from, "Complete your KYC verification now (required before funding)", [
+    {
+      type: "button",
+      button: {
+        type: "webview",
+        url: `${WEBAPP}/?phone=${from}#kyc`,                 // ← Your KYC page/section
+        text: "Start KYC Verification →"
+      }
     }
+  ]);
+  return res.sendStatus(200);
+}
 
     /* --------------------------- FUND --------------------------- */
     if (userIntent === "fund") {
@@ -303,4 +311,4 @@ router.post("/", async (req, res) => {
   }
 });
 
-export default router;
+export default router; 
