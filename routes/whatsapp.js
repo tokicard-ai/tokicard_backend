@@ -1,7 +1,7 @@
-// routes/whatsapp.js → FIXED VERSION (Button Priority Fix)
+// routes/whatsapp.js → UPDATED WITH TEMPLATE MESSAGE
 import express from "express";
 import axios from "axios";
-import { sendMessage } from "../utils/sendMessage.js";
+import { sendMessage, sendTemplateWithURL } from "../utils/sendMessage.js";
 const router = express.Router();
 
 const API_BASE = "https://tokicard-api.onrender.com/auth";
@@ -149,18 +149,10 @@ router.post("/", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    /* --------------------------- ACTIVATE CARD (REGISTER) --------------------------- */
+    /* --------------------------- ACTIVATE CARD (REGISTER) - UPDATED WITH TEMPLATE --------------------------- */
     if (userIntent === "register") {
-      const link = `${WEBAPP}/?phone=${from}`;
-      // Enhanced CTA with header/footer for better in-app experience
-      await sendMessage(
-        from, 
-        `Complete your registration to get your virtual USD card. The process takes less than 2 minutes!`, 
-        [], 
-        true, 
-        1200,
-        { text: "Activate Card Now", url: link }
-      );
+      // Use approved template message - opens in WhatsApp in-app browser!
+      await sendTemplateWithURL(from, "toki_card_activation", "en_US");
       return res.sendStatus(200);
     }
 
@@ -288,7 +280,7 @@ router.post("/", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    /* --------------------------- ACKNOWLEDGE ----------------------- */
+    /* --------------------------- ACKNOWLEDGE --------------------------- */
     if (userIntent === "acknowledge") {
       await sendMessage(from, "Great! 👍 Type *help* if you need anything else.", [
         { label: "Help" }
@@ -311,4 +303,4 @@ router.post("/", async (req, res) => {
   }
 });
 
-export default router; 
+export default router;

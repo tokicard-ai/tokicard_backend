@@ -81,7 +81,7 @@ export async function sendRegistrationFlow(to) {
 
 /**
  * SOLUTION 1: Use Template Message with URL Button
- * This opens in WhatsApp's in-app browser on most devices
+ * This opens in WhatsApp's in-app browser on most devices noted , on
  * NOTE: Requires approved template in Meta Business Manager
  */
 export async function sendTemplateWithURL(to, templateName, languageCode = "en") {
