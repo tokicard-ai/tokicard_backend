@@ -81,7 +81,7 @@ export async function sendRegistrationFlow(to) {
 
 /**
  * SOLUTION 1: Use Template Message with URL Button
- * This opens in WhatsApp's in-app browser on most devices noted , on
+ * This opens in WhatsApp's in-app browser on most devices
  * NOTE: Requires approved template in Meta Business Manager
  */
 export async function sendTemplateWithURL(to, templateName, languageCode = "en") {
@@ -97,13 +97,22 @@ export async function sendTemplateWithURL(to, templateName, languageCode = "en")
         },
         components: [
           {
+            type: "body",
+            parameters: [
+              {
+                type: "text",
+                text: "there" // Replaces {{1}} in body text (Hi {{1}})
+              }
+            ]
+          },
+          {
             type: "button",
             sub_type: "url",
             index: 0,
             parameters: [
               {
                 type: "text",
-                text: to
+                text: to // Replaces {{1}} in URL
               }
             ]
           }
@@ -126,6 +135,7 @@ export async function sendTemplateWithURL(to, templateName, languageCode = "en")
     return response.data;
   } catch (error) {
     console.error("❌ Failed to send template:", error.response?.data || error.message);
+    console.error("Full error details:", JSON.stringify(error.response?.data, null, 2));
     throw error;
   }
 }
