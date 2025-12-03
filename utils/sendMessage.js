@@ -127,7 +127,7 @@ export async function sendMessageWithButtons(to, text, buttons = []) {
   }
 }
 
-// USAGE EXAMPLES:
+// USAGE EXAMPLES :
 /*
 // 1. Send message with "Activate Card" button
 await sendMessage(
