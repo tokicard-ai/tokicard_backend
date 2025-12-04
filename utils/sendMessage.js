@@ -126,30 +126,3 @@ export async function sendMessageWithButtons(to, text, buttons = []) {
     throw error;
   }
 }
-
-// USAGE EXAMPLES :
-/*
-// 1. Send message with "Activate Card" button
-await sendMessage(
-  "+2348012345678",
-  "Welcome to Toki Card! Complete your registration to activate your card.",
-  "https://tokicard.com/activate?phone=+2348012345678"
-);
-
-// 2. Send regular text message (no button)
-await sendMessage(
-  "+2348012345678",
-  "Thank you for registering!"
-);
-
-// 3. Send message with reply buttons (for bot flow)
-await sendMessageWithButtons(
-  "+2348012345678",
-  "How can we help you today?",
-  [
-    { id: "help", label: "Get Help" },
-    { id: "status", label: "Check Status" },
-    { id: "support", label: "Contact Support" }
-  ]
-);
-*/
