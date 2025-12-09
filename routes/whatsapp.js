@@ -91,27 +91,54 @@ router.post("/", async (req, res) => {
     }
 
     /* ====================== SELL CRYPTO ====================== */
- // routes/whatsapp.js - inside the SELL CRYPTO block
-// ...
-
-    /* ====================== SELL CRYPTO ====================== */
-    if (text.includes("sell") || text.includes("💰")) {
-      if (!user) {
-        // 1. USE THE APPROVED TEMPLATE NAME AND EXTRACT SUFFIX
-        const TEMPLATE_NAME = "toki_card_activation"; // <--- Confirmed Marketing Template Name
+   /* ====================== SELL CRYPTO ====================== */
+if (text.includes("sell") || text.includes("💰")) {
+    if (!user) {
+        // 1. Set the correct template name (toki_card_activation)
+        const TEMPLATE_NAME = "toki_card_activation"; 
+        // 2. Create only the URL Suffix
         const registrationUrlSuffix = `register?phone=${from}`;
         
-        // 2. USE THE IAB-GUARANTEED TEMPLATE FUNCTION
+        // 3. USE THE IAB-GUARANTEED TEMPLATE FUNCTION
+        // We pass 'null' for the body message variable because the 'toki_card_activation' 
+        // template has a static body and no variables there.
         await sendTemplateMessageWithIAB(
           from,
           TEMPLATE_NAME, 
-          null, // <--- **FINAL CHANGE HERE:** Passing 'null' to skip the body variable in the API payload
-          registrationUrlSuffix 
+          null, // <--- CORRECTED: Passing null to skip the body component
+          registrationUrlSuffix // Dynamic part of the URL (fills the template's button variable)
         );
         return res.sendStatus(200);
-      }
+    }
 
-// ... (rest of the code is unchanged)
+    // Check if BVN verified
+    if (!user.bvnVerified) {
+        await sendMessage(
+          from,
+          `⚠️ *BVN Verification Required*\n\n` +
+          `Your BVN verification is still pending. Please complete it to start selling.\n\n` +
+          `Type *help* if you need assistance.`
+        );
+        return res.sendStatus(200);
+    }
+
+    // User is verified - ask which coin
+    await db.collection("sessions").updateOne(
+        { phone: from },
+        { $set: { state: "awaiting_coin", data: {} } }
+    );
+
+    await sendMessageWithButtons(
+        from,
+        `💰 *Ready to sell your crypto!*\n\n` +
+        `Which coin are you selling today?`,
+        [
+          { id: "usdt", label: "USDT" },
+          { id: "btc", label: "BTC" },
+        ]
+    );
+    return res.sendStatus(200);
+}
 
     /* ====================== CHECK BALANCE ====================== */
     if (text.includes("balance") || text.includes("📊")) {
