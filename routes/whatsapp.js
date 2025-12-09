@@ -1,22 +1,20 @@
-// routes/whatsapp.js → UPDATED WITH FUNDING HANDLERS
+// routes/whatsapp.js - UPDATED FOR OFF-RAMP PROJECT
 import express from "express";
-import axios from "axios";
 import { sendMessage, sendMessageWithButtons } from "../utils/sendMessage.js";
 import { getDb } from "../db/mongo.js";
+
 const router = express.Router();
 
-const API_BASE = "https://tokicard-api.onrender.com/auth";
-const WEBAPP = "https://tokicard-onboardingform.onrender.com";
-
-/* ---------------------- META WEBHOOK VERIFICATION --------------------- */
+/* ====================== WEBHOOK VERIFICATION ====================== */
 router.get("/", (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
+
   if (mode && token) {
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("WhatsApp Webhook verified successfully!");
+      console.log("✅ WhatsApp webhook verified successfully!");
       res.status(200).send(challenge);
     } else {
       res.sendStatus(403);
@@ -26,334 +24,319 @@ router.get("/", (req, res) => {
   }
 });
 
-/* ----------------------------- MAIN ROUTER ----------------------------- */
+/* ====================== MAIN MESSAGE HANDLER ====================== */
 router.post("/", async (req, res) => {
   try {
+    console.log("📩 Webhook received:", JSON.stringify(req.body, null, 2));
+
     const message = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!message) return res.sendStatus(200);
+    
+    if (!message) {
+      console.log("⚠️ No message found in webhook");
+      return res.sendStatus(200);
+    }
 
     const from = message.from;
     
-    // Better text extraction with fallback
+    // Extract text from different message types
     let text = "";
-    let isButton = false;
-    
     if (message.text?.body) {
       text = message.text.body.trim().toLowerCase();
     } else if (message.interactive?.button_reply?.title) {
       text = message.interactive.button_reply.title.toLowerCase();
-      isButton = true;
     } else if (message.interactive?.list_reply?.title) {
       text = message.interactive.list_reply.title.toLowerCase();
-      isButton = true;
     }
     
-    console.log("Message from", from, ":", text, isButton ? "(button)" : "(text)");
+    console.log(`📱 Message from ${from}: "${text}"`);
     
     if (!text) {
-      console.log("No text content found in message");
+      console.log("⚠️ No text content");
       return res.sendStatus(200);
     }
 
-    /* ----------------------------- INTENTS ----------------------------- */
-    const intents = {
-      register: ["activate card", "activate", "register", "signup", "sign up", "create account", "start", "open registration", "registration"],
-      kyc: ["kyc", "verify", "identity", "verification", "id verification"],
-      fund: ["fund", "top up", "deposit", "add money", "recharge"],
-      balance: ["balance", "wallet", "check balance", "my balance"],
-      help: ["help", "support", "assist", "commands"],
-      about: ["about", "what is toki", "toki card", "info", "information"],
-      how: ["how", "how it works", "guide", "tutorial"],
-      security: ["safe", "secure", "trust", "security", "is it safe"],
-      fees: ["cost", "fee", "charges", "price", "pricing"],
-      features: ["features", "benefits", "what can", "advantages"],
-      referral: ["refer", "invite", "referral", "refer friend"],
-      crypto: ["crypto", "usdt", "bitcoin", "btc", "cryptocurrency"],
-      fiat: ["fiat", "bank transfer"],
-      card: ["show card", "card details", "show card details", "my card", "virtual card", "card info", "show my card", "view card", "see card", "card number"],
-      acknowledge: ["ok", "okay", "cool", "thanks", "thank you", "got it"],
-      followup: ["what next", "continue", "next", "then", "what now"],
-      // ✅ NEW: Funding intents
-      cryptoFund: ["fund with crypto", "crypto funding", "stablecoin"],
-      bankFund: ["bank transfer (ngn)", "fund with bank", "ngn funding"]
-    };
-
-    // Check for exact matches first (for buttons)
-    let userIntent = null;
+    const db = getDb();
     
-    for (const [intent, list] of Object.entries(intents)) {
-      if (list.includes(text)) {
-        userIntent = intent;
-        console.log("Exact match found:", intent);
-        break;
-      }
-    }
-    
-    // If no exact match, try partial match
-    if (!userIntent) {
-      for (const [intent, list] of Object.entries(intents)) {
-        if (list.some(kw => text.includes(kw))) {
-          userIntent = intent;
-          console.log("Partial match found:", intent);
-          break;
-        }
-      }
-    }
-    
-    console.log("Final detected intent:", userIntent);
+    // Check if user exists
+    let user = await db.collection("users").findOne({ phone: from });
+    console.log(`👤 User ${from}: ${user ? "Registered ✅" : "New ❌"}`);
 
-    // GET USER FROM REAL BACKEND
-    let user;
-    try {
-      const res = await axios.get(`${API_BASE}/user`, { params: { email: from }, timeout: 8000 });
-      user = res.data;
-      console.log("User found:", user ? "Yes" : "No");
-    } catch (e) {
-      console.log("User fetch error:", e.message);
-      user = null;
+    /* ====================== GET SESSION STATE ====================== */
+    let session = await db.collection("sessions").findOne({ phone: from });
+    if (!session) {
+      session = { phone: from, state: "idle", data: {} };
+      await db.collection("sessions").insertOne(session);
     }
 
-    /* ------------------------------ GREETING ------------------------------ */
-    if (!isButton && !userIntent && /^(hi|hello|hey|greetings|good morning|good evening)$/i.test(text)) {
-      await sendMessageWithButtons(from, "Welcome to *Tokicard*! 👋\n\nWhat would you like to do?", [
-        { label: "Activate Card" }, { label: "Fund" }, { label: "Help" }
-      ]);
-      return res.sendStatus(200);
-    }
-
-    /* --------------------- CARD DETAILS — 2 MESSAGES --------------------- */
-    if (userIntent === "card") {
-      if (!user) {
-        await sendMessageWithButtons(from, "Please *activate your card first* before viewing it.", [
-          { label: "Activate Card" }
-        ]);
-        return res.sendStatus(200);
-      }
-      
-      if (!user.card?.number) {
-        await sendMessageWithButtons(from, "Your card is not ready yet. Please complete funding or try again later.", [
-          { label: "Fund" }, { label: "Help" }
-        ]);
-        return res.sendStatus(200);
-      }
-      
-      const card = user.card;
-      await sendMessageWithButtons(from,
-        `*Your Toki USD Virtual Card* 💳\n\n` +
-        `• *Expiry:* ${card.expiry}\n` +
-        `• *CVV:* ${card.cvv}\n\n` +
-        `Your card number is below ⬇️`,
-        [{ label: "Fund" }, { label: "Help" }]
-      );
-      await sendMessage(from, `*Card Number:*\n\`${card.number}\`\n\n_Tap & hold to copy_`);
-      return res.sendStatus(200);
-    }
-
-    /* --------------------------- ACTIVATE CARD (REGISTER) --------------------------- */
-    if (userIntent === "register") {
-      const activationUrl = `https://tokicard-onboardingform.onrender.com?phone=${from}`;
-      await sendMessage(
-        from,
-        `🎉 *Welcome to Tokicard!*\n\nYour virtual USD card for seamless global payments.\n\n` +
-        `✅ Fund with crypto (USDT, BTC)\n` +
-        `✅ Spend anywhere online\n` +
-        `✅ Instant card creation\n\n` +
-        `Click below to activate your card now! 👇`,
-        activationUrl,
-        "Activate Card"
-      );
-      return res.sendStatus(200);
-    }
-
-    /* --------------------------- KYC --------------------------- */
-    if (userIntent === "kyc") {
-      const kycUrl = `https://tokicard-onboardingform.onrender.com?phone=${from}`;
-      await sendMessage(
-        from,
-        `📋 *Complete your KYC verification*\n\nThis is required before you can fund your card.`,
-        kycUrl,
-        "Start KYC"
-      );
-      return res.sendStatus(200);
-    }
-
-    /* --------------------------- FUND --------------------------- */
-    if (userIntent === "fund") {
-      if (!user) {
-        await sendMessageWithButtons(from, "Please *activate your card first* before funding.", [
-          { label: "Activate Card" }
-        ]);
-        return res.sendStatus(200);
-      }
-      if (!user?.kycBasicCompleted) {
-        await sendMessageWithButtons(from, "⚠️ You must complete *KYC verification* first before funding.", [
-          { label: "KYC" }
-        ]);
-        return res.sendStatus(200);
-      }
-      await sendMessageWithButtons(from, "💳 *Choose your funding method:*", [
-        { label: "Crypto" }, { label: "Fiat" }
-      ]);
-      return res.sendStatus(200);
-    }
-
-    /* --------------------------- CRYPTO FUNDING (UPDATED) --------------------------- */
-    if (userIntent === "crypto" || userIntent === "cryptoFund") {
-      const cryptoUrl = `https://tokicard-onboardingform.onrender.com/crypto-deposit?phone=${from}`;
-      await sendMessage(
-        from,
-        `🪙 *Crypto Funding*\n\n` +
-        `We support:\n` +
-        `• USDT (TRC20) - Min: $10\n` +
-        `• USDC - Min: $10\n` +
-        `• CTNG - Min: $5\n\n` +
-        `💡 Deposits are processed *instantly*!`,
-        cryptoUrl,
-        "Start Crypto Deposit"
-      );
-      return res.sendStatus(200);
-    }
-
-    /* --------------------------- BANK FUNDING (UPDATED) --------------------------- */
-    if (userIntent === "fiat" || userIntent === "bankFund") {
-      if (!user) {
-        await sendMessageWithButtons(from, "Please *activate your card first* before funding.", [
-          { label: "Activate Card" }
-        ]);
-        return res.sendStatus(200);
-      }
-
-      // Get or generate virtual account
-      let account = user.virtualAccount;
-      
-      if (!account) {
-        account = {
-          bankName: "Providus Bank",
-          accountNumber: "98" + Math.floor(10000000 + Math.random() * 90000000),
-          accountName: `TOKI-${user.firstName} ${user.lastName}`,
-          rate: 1520
-        };
-        
-        // Save to database
-        const db = getDb();
-        await db.collection("users").updateOne(
-          { email: from },
-          { $set: { virtualAccount: account } }
-        );
-      }
-
-      await sendMessage(
-        from,
-        `🏦 *Your Personal Bank Account*\n\n` +
-        `*Bank:* ${account.bankName}\n` +
-        `*Account Number:* ${account.accountNumber}\n` +
-        `*Account Name:* ${account.accountName}\n\n` +
-        `📌 *How to fund:*\n` +
-        `1. Transfer NGN to the account above\n` +
-        `2. Funds convert automatically to USD\n` +
-        `3. Card gets funded within minutes\n\n` +
-        `💡 *Current Rate:* ₦${account.rate}/$1\n\n` +
-        `_These are your permanent details. Save them!_`
+    /* ====================== GREETING ====================== */
+    if (!text || /^(hi|hello|hey|start|menu)$/i.test(text)) {
+      await db.collection("sessions").updateOne(
+        { phone: from },
+        { $set: { state: "idle", data: {} } }
       );
 
       await sendMessageWithButtons(
         from,
-        "Need help?",
+        `👋 *Welcome to Tokicard AI!*\n\n` +
+        `Your trusted partner for crypto off-ramping.\n\n` +
+        `Select an option below to get started:`,
         [
-          { label: "Check Balance" },
-          { label: "Help" }
+          { id: "sell", label: "💰 Sell Crypto" },
+          { id: "balance", label: "📊 Check Balance" },
+          { id: "rates", label: "💱 View Rates" },
         ]
       );
       return res.sendStatus(200);
     }
 
-    /* --------------------------- BALANCE --------------------------- */
-    if (userIntent === "balance") {
+    /* ====================== SELL CRYPTO ====================== */
+    if (text.includes("sell") || text.includes("💰")) {
       if (!user) {
-        await sendMessageWithButtons(from, "Please *activate your card first* to check your balance.", [
-          { label: "Activate Card" }
-        ]);
+        const registrationUrl = `${process.env.WEBAPP_URL}/register?phone=${from}`;
+        
+        await sendMessage(
+          from,
+          `🎉 *Welcome to Tokicard AI!*\n\n` +
+          `To start selling crypto, create your account in 2 minutes:\n\n` +
+          `✅ Verify your BVN\n` +
+          `✅ Link your bank account\n` +
+          `✅ Set your secure PIN\n\n` +
+          `*Daily limit: ₦5,000,000*\n\n` +
+          `Tap the link below to get started:`,
+          registrationUrl
+        );
         return res.sendStatus(200);
       }
-      const balance = user.balance || 0;
-      await sendMessageWithButtons(from, 
-        `💰 *Your Balance*\n\n$${balance.toFixed(2)} USD\n\n` +
-        `${balance < 10 ? "Low balance. Consider funding your account!" : ""}`,
-        [{ label: "Fund" }, { label: "Show Card" }]
+
+      // Check if BVN verified
+      if (!user.bvnVerified) {
+        await sendMessage(
+          from,
+          `⚠️ *BVN Verification Required*\n\n` +
+          `Your BVN verification is still pending. Please complete it to start selling.\n\n` +
+          `Type *help* if you need assistance.`
+        );
+        return res.sendStatus(200);
+      }
+
+      // User is verified - ask which coin
+      await db.collection("sessions").updateOne(
+        { phone: from },
+        { $set: { state: "awaiting_coin", data: {} } }
+      );
+
+      await sendMessageWithButtons(
+        from,
+        `💰 *Ready to sell your crypto!*\n\n` +
+        `Which coin are you selling today?`,
+        [
+          { id: "usdt", label: "USDT" },
+          { id: "btc", label: "BTC" },
+        ]
       );
       return res.sendStatus(200);
     }
 
-    /* --------------------------- HELP --------------------------- */
-    if (userIntent === "help") {
-      await sendMessageWithButtons(from, 
-        `🤖 *Tokicard Bot - Commands*\n\n` +
-        `*Getting Started:*\n` +
-        `• Activate Card - Create your account\n` +
-        `• KYC - Verify your identity\n\n` +
-        `*Card Management:*\n` +
-        `• Fund - Add money to your card\n` +
-        `• Balance - Check your balance\n` +
-        `• Show Card - View card details\n\n` +
-        `*Information:*\n` +
-        `• About - Learn about Tokicard\n` +
-        `• Features - See what we offer\n\n` +
-        `Just type any command or click a button!`,
-        [{ label: "Activate Card" }, { label: "About" }]
+    /* ====================== CHECK BALANCE ====================== */
+    if (text.includes("balance") || text.includes("📊")) {
+      if (!user) {
+        await sendMessage(
+          from,
+          `⚠️ Please register first to check your balance.\n\n` +
+          `Type *sell* to get started.`
+        );
+        return res.sendStatus(200);
+      }
+
+      const balance = user.balance || { usdt: 0, btc: 0, ngn: 0 };
+      const limitRemaining = (user.dailyLimit || 5000000) - (user.dailyLimitUsed || 0);
+      
+      await sendMessageWithButtons(
+        from,
+        `💰 *Your Balances*\n\n` +
+        `USDT: ${balance.usdt.toFixed(2)}\n` +
+        `BTC: ${balance.btc.toFixed(8)}\n` +
+        `NGN: ₦${balance.ngn.toLocaleString()}\n\n` +
+        `📊 *Daily Limit*\n` +
+        `Remaining: ₦${limitRemaining.toLocaleString()}\n` +
+        `Total: ₦${(user.dailyLimit || 5000000).toLocaleString()}`,
+        [
+          { id: "sell", label: "💰 Sell Crypto" },
+          { id: "rates", label: "💱 View Rates" },
+        ]
       );
       return res.sendStatus(200);
     }
 
-    /* --------------------------- ABOUT --------------------------- */
-    if (userIntent === "about") {
-      await sendMessageWithButtons(from,
-        `*About Tokicard* 💳\n\n` +
-        `TokiCard is your virtual USD card for seamless global payments.\n\n` +
-        `✅ Fund with crypto (USDT, BTC)\n` +
-        `✅ Spend anywhere online\n` +
-        `✅ Instant card creation\n` +
-        `✅ Secure & reliable\n\n` +
-        `Ready to get started?`,
-        [{ label: "Activate Card" }, { label: "Features" }]
+    /* ====================== VIEW RATES ====================== */
+    if (text.includes("rate") || text.includes("💱") || text.includes("price")) {
+      // Mock rates (we'll add real API later)
+      const usdtRate = 1455;
+      const btcRate = 78000000;
+      
+      await sendMessageWithButtons(
+        from,
+        `💱 *Tokicard AI Live Rates*\n\n` +
+        `_(Updated 60s ago)_\n\n` +
+        `1 USDT = ₦${usdtRate.toLocaleString()} _(You Receive)_\n` +
+        `1 BTC = ₦${btcRate.toLocaleString()} _(You Receive)_\n\n` +
+        `💡 Rates include our processing fee`,
+        [
+          { id: "sell", label: "💰 Sell Now" },
+          { id: "menu", label: "🏠 Main Menu" },
+        ]
       );
       return res.sendStatus(200);
     }
 
-    /* --------------------------- FEATURES --------------------------- */
-    if (userIntent === "features") {
-      await sendMessageWithButtons(from,
-        `✨ *Tokicard Features*\n\n` +
-        `🌍 Global Acceptance\n` +
-        `💸 Low Fees\n` +
-        `⚡ Instant Deposits\n` +
-        `🔒 Bank-Level Security\n` +
-        `💳 Virtual Card\n` +
-        `📱 Easy Management\n\n` +
-        `Get your card today!`,
-        [{ label: "Activate Card" }, { label: "Help" }]
+    /* ====================== HELP / SUPPORT ====================== */
+    if (text.includes("help") || text.includes("support") || text.includes("❓")) {
+      await sendMessageWithButtons(
+        from,
+        `❓ *Need Help?*\n\n` +
+        `*Common Commands:*\n` +
+        `• Type *sell* to sell crypto\n` +
+        `• Type *balance* to check balance\n` +
+        `• Type *rates* to view rates\n` +
+        `• Type *menu* for main menu\n\n` +
+        `*Need Human Support?*\n` +
+        `Contact us for assistance.`,
+        [
+          { id: "menu", label: "🏠 Main Menu" },
+        ]
       );
       return res.sendStatus(200);
     }
 
-    /* --------------------------- ACKNOWLEDGE --------------------------- */
-    if (userIntent === "acknowledge") {
-      await sendMessageWithButtons(from, "Great! 👍 Type *help* if you need anything else.", [
-        { label: "Help" }
-      ]);
-      return res.sendStatus(200);
-    }
-
-    /* ------------------------------ DEFAULT ------------------------------ */
-    await sendMessageWithButtons(from, 
+    /* ====================== DEFAULT ====================== */
+    await sendMessageWithButtons(
+      from,
       `🤔 I didn't understand that.\n\n` +
-      `Type *help* to see what I can do, or click a button below.`, 
-      [{ label: "Help" }, { label: "Activate Card" }, { label: "Fund" }]
+      `Type *menu* to see what I can do.`,
+      [
+        { id: "sell", label: "💰 Sell Crypto" },
+        { id: "rates", label: "💱 View Rates" },
+        { id: "help", label: "❓ Help" },
+      ]
     );
     return res.sendStatus(200);
 
-  } catch (err) {
-    console.error("❌ WhatsApp route error:", err);
-    console.error("Error stack:", err.stack);
+  } catch (error) {
+    console.error("❌ Webhook error:", error);
+    console.error("Stack:", error.stack);
+    res.sendStatus(500);
+  }
+});
+
+/* ====================== BANK TRANSFER WEBHOOK ====================== */
+// This will be called by Paystack when we send NGN to user's bank
+router.post("/bank-transfer", async (req, res) => {
+  try {
+    console.log("💸 Bank transfer webhook:", req.body);
+
+    // Verify Paystack signature (important for security!)
+    const hash = crypto
+      .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+    
+    if (hash !== req.headers["x-paystack-signature"]) {
+      console.log("⚠️ Invalid Paystack signature");
+      return res.sendStatus(400);
+    }
+
+    const { event, data } = req.body;
+
+    if (event === "transfer.success") {
+      const db = getDb();
+      
+      // Find transaction by reference
+      const transaction = await db.collection("transactions").findOne({
+        payoutReference: data.reference,
+      });
+
+      if (transaction) {
+        // Update transaction status
+        await db.collection("transactions").updateOne(
+          { _id: transaction._id },
+          {
+            $set: {
+              status: "completed",
+              completedAt: new Date(),
+            },
+          }
+        );
+
+        // Notify user
+        const user = await db.collection("users").findOne({ _id: transaction.userId });
+        if (user) {
+          await sendMessage(
+            user.phone,
+            `✅ *Payment Sent!*\n\n` +
+            `₦${transaction.ngnAmount.toLocaleString()} has been sent to your bank account.\n\n` +
+            `Bank: ${transaction.bankAccount.bankName}\n` +
+            `Account: ${transaction.bankAccount.accountNumber}\n\n` +
+            `Transaction ID: ${transaction._id}`
+          );
+        }
+      }
+    }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Bank transfer webhook error:", error);
+    res.sendStatus(500);
+  }
+});
+
+/* ====================== CRYPTO DEPOSIT WEBHOOK ====================== */
+// This will be called when we detect crypto on blockchain
+router.post("/crypto-deposit", async (req, res) => {
+  try {
+    console.log("🪙 Crypto deposit webhook:", req.body);
+
+    const { transactionId, txHash, amount, status } = req.body;
+
+    if (status === "confirmed") {
+      const db = getDb();
+      
+      const transaction = await db.collection("transactions").findOne({
+        _id: transactionId,
+      });
+
+      if (transaction) {
+        // Update transaction
+        await db.collection("transactions").updateOne(
+          { _id: transactionId },
+          {
+            $set: {
+              status: "processing_payout",
+              depositTxHash: txHash,
+              depositConfirmedAt: new Date(),
+            },
+          }
+        );
+
+        // Notify user
+        const user = await db.collection("users").findOne({ _id: transaction.userId });
+        if (user) {
+          await sendMessage(
+            user.phone,
+            `✅ *Crypto Received!*\n\n` +
+            `We received ${amount} ${transaction.coin}.\n\n` +
+            `Sending ₦${transaction.ngnAmount.toLocaleString()} to your bank account now...\n\n` +
+            `Transaction ID: ${transactionId}`
+          );
+        }
+
+        // TODO: Trigger bank transfer here
+        // await sendBankTransfer(transaction);
+      }
+    }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Crypto deposit webhook error:", error);
     res.sendStatus(500);
   }
 });
