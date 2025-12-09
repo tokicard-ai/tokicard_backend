@@ -39,3 +39,39 @@ export async function connectToDatabase() {
     throw error;
   }
 }
+
+// ✅ ADD THIS FUNCTION (THIS IS WHAT'S MISSING!)
+export function getDb() {
+  if (!db) {
+    throw new Error("Database not initialized. Call connectToDatabase first.");
+  }
+  return db;
+}
+
+// ✅ ALSO ADD THIS (for graceful shutdown)
+export async function closeDatabaseConnection() {
+  if (client) {
+    await client.close();
+    console.log("✅ MongoDB connection closed");
+  }
+}
+
+// ✅ ADD THIS FUNCTION TOO (for creating indexes)
+async function createIndexes() {
+  try {
+    // Users collection indexes
+    await db.collection("users").createIndex({ phone: 1 }, { unique: true });
+    await db.collection("users").createIndex({ email: 1 }, { unique: true });
+    
+    // Sessions collection indexes
+    await db.collection("sessions").createIndex({ phone: 1 }, { unique: true });
+    await db.collection("sessions").createIndex(
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 }
+    );
+    
+    console.log("✅ Database indexes created");
+  } catch (error) {
+    console.log("ℹ️ Indexes may already exist");
+  }
+}
