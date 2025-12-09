@@ -92,54 +92,64 @@ router.post("/", async (req, res) => {
 
     /* ====================== SELL CRYPTO ====================== */
    /* ====================== SELL CRYPTO ====================== */
+/* ====================== SELL CRYPTO ====================== */
 if (text.includes("sell") || text.includes("💰")) {
-    if (!user) {
-        // 1. Set the correct template name (toki_card_activation)
-        const TEMPLATE_NAME = "toki_card_activation"; 
-        // 2. Create only the URL Suffix
-        const registrationUrlSuffix = `register?phone=${from}`;
-        
-        // 3. USE THE IAB-GUARANTEED TEMPLATE FUNCTION
-        // We pass 'null' for the body message variable because the 'toki_card_activation' 
-        // template has a static body and no variables there.
-        await sendTemplateMessageWithIAB(
-          from,
-          TEMPLATE_NAME, 
-          null, // <--- CORRECTED: Passing null to skip the body component
-          registrationUrlSuffix // Dynamic part of the URL (fills the template's button variable)
-        );
-        return res.sendStatus(200);
-    }
+  if (!user) {
+    try {
+      console.log(`📤 Sending template to ${from}`);
+      
+      // Use IAB-guaranteed template
+      await sendTemplateMessageWithIAB(
+        from,
+        "toki_card_activation",
+        from // This becomes the {{1}} in button URL
+      );
+      
+      console.log(`✅ Template sent successfully`);
+      
+    } catch (error) {
+      console.error("❌ Template send failed:", error.message);
+      
+      // Fallback to regular message
+      await sendMessage(
+        from,
+        `🎉 *Welcome to Tokicard AI!*\n\n` +
+        `Register here:`,
+        `https://tokicard-onboardingform.onrender.com/register?phone=${from}`
+      );
+    }
+    
+    return res.sendStatus(200);
+  }
 
-    // Check if BVN verified
-    if (!user.bvnVerified) {
-        await sendMessage(
-          from,
-          `⚠️ *BVN Verification Required*\n\n` +
-          `Your BVN verification is still pending. Please complete it to start selling.\n\n` +
-          `Type *help* if you need assistance.`
-        );
-        return res.sendStatus(200);
-    }
+  // Check if BVN verified
+  if (!user.bvnVerified) {
+    await sendMessage(
+      from,
+      `⚠️ *BVN Verification Required*\n\n` +
+      `Your BVN verification is still pending. Please complete it to start selling.\n\n` +
+      `Type *help* if you need assistance.`
+    );
+    return res.sendStatus(200);
+  }
 
-    // User is verified - ask which coin
-    await db.collection("sessions").updateOne(
-        { phone: from },
-        { $set: { state: "awaiting_coin", data: {} } }
-    );
+  // User is verified - ask which coin
+  await db.collection("sessions").updateOne(
+    { phone: from },
+    { $set: { state: "awaiting_coin", data: {} } }
+  );
 
-    await sendMessageWithButtons(
-        from,
-        `💰 *Ready to sell your crypto!*\n\n` +
-        `Which coin are you selling today?`,
-        [
-          { id: "usdt", label: "USDT" },
-          { id: "btc", label: "BTC" },
-        ]
-    );
-    return res.sendStatus(200);
+  await sendMessageWithButtons(
+    from,
+    `💰 *Ready to sell your crypto!*\n\n` +
+    `Which coin are you selling today?`,
+    [
+      { id: "usdt", label: "USDT" },
+      { id: "btc", label: "BTC" },
+    ]
+  );
+  return res.sendStatus(200);
 }
-
     /* ====================== CHECK BALANCE ====================== */
     if (text.includes("balance") || text.includes("📊")) {
       if (!user) {
