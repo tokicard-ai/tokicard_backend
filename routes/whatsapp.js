@@ -91,49 +91,27 @@ router.post("/", async (req, res) => {
     }
 
     /* ====================== SELL CRYPTO ====================== */
+ // routes/whatsapp.js - inside the SELL CRYPTO block
+// ...
+
+    /* ====================== SELL CRYPTO ====================== */
     if (text.includes("sell") || text.includes("💰")) {
       if (!user) {
-        // 2. CREATE ONLY THE URL SUFFIX
+        // 1. USE THE APPROVED TEMPLATE NAME AND EXTRACT SUFFIX
+        const TEMPLATE_NAME = "toki_card_activation"; // <--- Confirmed Marketing Template Name
         const registrationUrlSuffix = `register?phone=${from}`;
         
-        // 3. USE THE IAB-GUARANTEED TEMPLATE FUNCTION INSTEAD OF sendMessage
+        // 2. USE THE IAB-GUARANTEED TEMPLATE FUNCTION
         await sendTemplateMessageWithIAB(
           from,
-          "activate_your_tokicard", // <--- ENSURE THIS IS YOUR EXACT APPROVED TEMPLATE NAME
-          `🎉 *Welcome to Tokicard AI!*\n\nTo start selling crypto, click the button below to create your secure account and set your PIN.`, // Text for the template body variable
-          registrationUrlSuffix // Dynamic part of the URL
+          TEMPLATE_NAME, 
+          null, // <--- **FINAL CHANGE HERE:** Passing 'null' to skip the body variable in the API payload
+          registrationUrlSuffix 
         );
         return res.sendStatus(200);
       }
 
-      // Check if BVN verified
-      if (!user.bvnVerified) {
-        await sendMessage(
-          from,
-          `⚠️ *BVN Verification Required*\n\n` +
-          `Your BVN verification is still pending. Please complete it to start selling.\n\n` +
-          `Type *help* if you need assistance.`
-        );
-        return res.sendStatus(200);
-      }
-
-      // User is verified - ask which coin
-      await db.collection("sessions").updateOne(
-        { phone: from },
-        { $set: { state: "awaiting_coin", data: {} } }
-      );
-
-      await sendMessageWithButtons(
-        from,
-        `💰 *Ready to sell your crypto!*\n\n` +
-        `Which coin are you selling today?`,
-        [
-          { id: "usdt", label: "USDT" },
-          { id: "btc", label: "BTC" },
-        ]
-      );
-      return res.sendStatus(200);
-    }
+// ... (rest of the code is unchanged)
 
     /* ====================== CHECK BALANCE ====================== */
     if (text.includes("balance") || text.includes("📊")) {
