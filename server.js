@@ -65,7 +65,8 @@ app.get("/", (req, res) => {
 });
 
 // WhatsApp webhook routes
-app.use("/webhook", whatsappRoutes);
+// app.use("/webhook", whatsappRoutes);
+app.use("/whatsapp", whatsappRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -86,8 +87,8 @@ async function startServer() {
     
     // Start Express server
     app.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
-      console.log(`📱 WhatsApp webhook: http://localhost:${PORT}/webhook`);
+   console.log(`✅ Server running on port ${PORT}`);
+console.log(`📱 WhatsApp webhook: https://tokicard-backend-wvkv.onrender.com/webhook`);
     });
     
   } catch (error) {
