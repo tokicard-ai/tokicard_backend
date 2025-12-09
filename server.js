@@ -42,6 +42,7 @@
 // startServer();
 
 // server.js
+// server.js
 import express from "express";
 import dotenv from "dotenv";
 import { connectToDatabase, closeDatabaseConnection } from "./db/mongo.js";
@@ -64,8 +65,7 @@ app.get("/", (req, res) => {
   });
 });
 
-// WhatsApp webhook routes
-// app.use("/webhook", whatsappRoutes);
+// WhatsApp webhook routes - CHANGED TO /whatsapp
 app.use("/whatsapp", whatsappRoutes);
 
 // 404 handler
@@ -82,13 +82,11 @@ app.use((error, req, res, next) => {
 // Start server
 async function startServer() {
   try {
-    // Connect to MongoDB
     await connectToDatabase();
     
-    // Start Express server
     app.listen(PORT, () => {
-   console.log(`✅ Server running on port ${PORT}`);
-console.log(`📱 WhatsApp webhook: https://tokicard-backend-wvkv.onrender.com/webhook`);
+      console.log(`✅ Server running on port ${PORT}`);
+      console.log(`📱 WhatsApp webhook: https://tokicard-backend-wvkv.onrender.com/whatsapp`);
     });
     
   } catch (error) {
@@ -110,5 +108,4 @@ process.on("SIGTERM", async () => {
   process.exit(0);
 });
 
-// Start the server
 startServer();
